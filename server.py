@@ -72,7 +72,7 @@ For each prospect, list:
 Format as a clean, scannable list."""
 
         message = client.messages.create(
-            model="claude-opus",
+            model="claude-3-haiku-20240307",
             max_tokens=2000,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": prompt}]
@@ -118,7 +118,7 @@ Please research and identify 5-10 high-fit prospects:
 Format as a clean list with these details for each prospect."""
 
         message = client.messages.create(
-            model="claude-opus",
+            model="claude-3-haiku-20240307",
             max_tokens=2000,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": prompt}]
@@ -162,7 +162,7 @@ Keep it brief (under 120 words), consultative tone, reference their specific sit
 Format: Just the email body, ready to copy to Outlook Drafts and send."""
         
         message = client.messages.create(
-            model="claude-opus",
+            model="claude-3-haiku-20240307",
             max_tokens=1000,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": prompt}]
@@ -199,7 +199,7 @@ Please identify from recent Bid Match alerts:
 Format as a clean list with: Opportunity Title, Agency, Deadline, Priority Level, Fit Assessment."""
 
         message = client.messages.create(
-            model="claude-opus",
+            model="claude-3-haiku-20240307",
             max_tokens=2000,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": prompt}]
