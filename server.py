@@ -1,14 +1,23 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from dotenv import load_dotenv
 import anthropic
 import os
-
-load_dotenv()
+from datetime import datetime
 
 app = Flask(__name__)
-CORS(app)
 
+# Enable CORS for all routes and origins
+CORS(app, resources={r"/api/*": {"origins": "*"}})
+
+# Add manual CORS headers to every response as backup
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    return response
+
+# Initialize Anthropic client - uses ANTHROPIC_API_KEY environment variable
 api_key = os.environ.get("ANTHROPIC_API_KEY")
 if not api_key:
     print("ERROR: ANTHROPIC_API_KEY not found in environment")
@@ -16,6 +25,7 @@ if not api_key:
 
 try:
     client = anthropic.Anthropic(api_key=api_key)
+    print("✓ Anthropic client initialized")
 except Exception as e:
     print(f"ERROR creating Anthropic client: {e}")
     exit(1)
@@ -30,6 +40,7 @@ Key context:
 - Services: Global payroll, HR/benefits implementation, change management, business transformation consulting
 - Target markets: Federal contractors (primes/subs nationwide), private companies (100-300 headcount, Palm Coast FL area + 100 miles)
 - Website: RamirezVentures.com
+- Key decision-makers: VPs of Operations, Program Managers, Business Development leads, HR Directors
 
 Your responsibilities:
 1. Scan Outlook sent folder for prospects without replies (14+ days = follow-up trigger)
@@ -37,25 +48,21 @@ Your responsibilities:
 3. Research new prospects with specific pain points and contact information
 4. Analyze Bid Match opportunities against NAICS codes
 5. All drafts are for review/approval (never auto-send)
+6. Keep prospect tracking updated with status, dates, and next actions
 
-Tone: Professional, consultative, direct."""
-
-@app.route('/api/health', methods=['GET'])
-def health():
-    return jsonify({"status": "healthy", "service": "RV BD Agent"}), 200
+Tone: Professional, consultative, direct. Show knowledge of their business/challenges. Make it personal, not spammy."""
 
 @app.route('/api/scan-sent', methods=['POST'])
 def scan_sent_folder():
+    """Scan Outlook sent folder for stale prospects"""
     try:
-        data = request.json or {}
+        data = request.json
         email = data.get('email', 'Fernando@RamirezVentures.com')
-        keywords = data.get('keywords', '')
         
         prompt = f"""I need you to help me scan my Outlook sent folder for stale prospects.
 
 My email: {email}
 Time period: Last 12 months
-{f'Keywords filter: {keywords}' if keywords else ''}
 
 Please identify any prospects who:
 1. Received an email 14-21 days ago with no reply
@@ -68,19 +75,25 @@ For each prospect, list:
 - Days since last email
 - Suggested follow-up approach
 
-Format as a clean, scannable list."""
+Format as a clean, scannable list. Focus on business development prospects (federal contractors, corporate HR/payroll leads)."""
 
         message = client.messages.create(
             model="claude-opus-5",
             max_tokens=2000,
             system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": prompt}]
+            messages=[
+                {"role": "user", "content": prompt}
+            ]
         )
         
+        # Extract text from claude-opus-5 response (handles thinking blocks)
         response_text = ""
         for block in message.content:
             if hasattr(block, 'text'):
                 response_text += block.text
+        
+        if not response_text:
+            response_text = "No prospects found or unable to process request."
         
         return jsonify({
             "status": "success",
@@ -90,12 +103,16 @@ Format as a clean, scannable list."""
         }), 200
         
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
 
 @app.route('/api/find-prospects', methods=['POST'])
 def find_prospects():
+    """Research new prospects"""
     try:
-        data = request.json or {}
+        data = request.json
         prospect_type = data.get('prospect_type', 'both')
         keywords = data.get('keywords', '')
         
@@ -110,7 +127,7 @@ def find_prospects():
 Prospect Type: {prospect_desc.get(prospect_type, prospect_desc['both'])}
 {f'Keywords/Focus: {keywords}' if keywords else ''}
 
-Please research and identify 5-10 high-fit prospects:
+Please research and identify high-fit prospects:
 - Company name and location
 - Headcount/type
 - Decision-maker: Title, name (if known), email (if available)
@@ -118,19 +135,25 @@ Please research and identify 5-10 high-fit prospects:
 - Why they're a good fit for Ramirez Ventures (global payroll, HR transformation, change management)
 - Fit score (1-10)
 
-Format as a clean list with these details for each prospect."""
+Format as a clean list with these details for each prospect. Focus on actionable intelligence."""
 
         message = client.messages.create(
             model="claude-opus-5",
             max_tokens=2000,
             system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": prompt}]
+            messages=[
+                {"role": "user", "content": prompt}
+            ]
         )
         
+        # Extract text from claude-opus-5 response (handles thinking blocks)
         response_text = ""
         for block in message.content:
             if hasattr(block, 'text'):
                 response_text += block.text
+        
+        if not response_text:
+            response_text = "No prospects identified."
         
         return jsonify({
             "status": "success",
@@ -140,12 +163,16 @@ Format as a clean list with these details for each prospect."""
         }), 200
         
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
 
 @app.route('/api/draft-email', methods=['POST'])
 def draft_email():
+    """Draft a personalized email"""
     try:
-        data = request.json or {}
+        data = request.json
         company = data.get('company', '')
         contact = data.get('contact', '')
         context = data.get('context', '')
@@ -159,7 +186,7 @@ Context: {context if context else 'This is a follow-up to a previous email that 
 Keep it brief (under 120 words), reference the prior conversation topic subtly, focus on value (global payroll, transformation, change management), and end with a clear call-to-action for a brief call.
 
 Format: Just the email body, ready to copy to Outlook Drafts and send."""
-        else:
+        else:  # cold outreach
             prompt = f"""Draft a compelling cold outreach email from Fernando Ramirez (Ramirez Ventures, RamirezVentures.com) to {contact} at {company}.
 
 Context: {context if context else 'This company likely needs global payroll, HR transformation, or change management consulting.'}
@@ -172,13 +199,19 @@ Format: Just the email body, ready to copy to Outlook Drafts and send."""
             model="claude-opus-5",
             max_tokens=1000,
             system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": prompt}]
+            messages=[
+                {"role": "user", "content": prompt}
+            ]
         )
         
+        # Extract text from claude-opus-5 response (handles thinking blocks)
         response_text = ""
         for block in message.content:
             if hasattr(block, 'text'):
                 response_text += block.text
+        
+        if not response_text:
+            response_text = "Failed to draft email"
         
         return jsonify({
             "status": "success",
@@ -186,14 +219,18 @@ Format: Just the email body, ready to copy to Outlook Drafts and send."""
             "company": company,
             "contact": contact,
             "email_type": email_type,
-            "draft": response_text
+            "results": response_text
         }), 200
         
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
 
 @app.route('/api/scan-bidmatch', methods=['POST'])
 def scan_bidmatch():
+    """Scan Bid Match for matching opportunities"""
     try:
         prompt = """I need you to help me analyze my Bid Match email stream for opportunities matching my business.
 
@@ -213,13 +250,19 @@ Format as a clean list with: Opportunity Title, Agency, Deadline, Priority Level
             model="claude-opus-5",
             max_tokens=2000,
             system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": prompt}]
+            messages=[
+                {"role": "user", "content": prompt}
+            ]
         )
         
+        # Extract text from claude-opus-5 response (handles thinking blocks)
         response_text = ""
         for block in message.content:
             if hasattr(block, 'text'):
                 response_text += block.text
+        
+        if not response_text:
+            response_text = "No matching opportunities found"
         
         return jsonify({
             "status": "success",
@@ -228,10 +271,23 @@ Format as a clean list with: Opportunity Title, Agency, Deadline, Priority Level
         }), 200
         
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+@app.route('/api/health', methods=['GET', 'OPTIONS'])
+def health_check():
+    """Health check endpoint"""
+    return jsonify({
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "service": "RV Business Development Agent Backend"
+    }), 200
 
 @app.route('/', methods=['GET'])
 def index():
+    """Root endpoint"""
     return jsonify({
         "service": "RV Business Development Agent Backend",
         "status": "running",
