@@ -7,8 +7,6 @@ from datetime import datetime
 
 load_dotenv()
 
-print("Starting RV BD Agent server...")
-
 app = Flask(__name__)
 CORS(app)
 
@@ -17,16 +15,13 @@ if not api_key:
     print("ERROR: ANTHROPIC_API_KEY not found in environment")
     exit(1)
 
-print(f"✓ API Key found: {api_key[:10]}...")
-
 try:
     client = anthropic.Anthropic(api_key=api_key)
-    print("✓ Anthropic client initialized")
 except Exception as e:
     print(f"ERROR creating Anthropic client: {e}")
     exit(1)
 
-SYSTEM_PROMPT = """You are the RV Business Development Agent for Ramirez Ventures LLC, an independent federal advisory firm specializing in global payroll implementation, HR transformation, and change management.
+SYSTEM_PROMPT = """You are the RV Business Development Agent for Ramirez Ventures LLC, an independent federal advisory firm.
 
 Your mission: Help Fernando identify stale prospects, research new business opportunities, and draft compelling, personalized outreach emails.
 
@@ -36,7 +31,6 @@ Key context:
 - Services: Global payroll, HR/benefits implementation, change management, business transformation consulting
 - Target markets: Federal contractors (primes/subs nationwide), private companies (100-300 headcount, Palm Coast FL area + 100 miles)
 - Website: RamirezVentures.com
-- Key decision-makers: VPs of Operations, Program Managers, Business Development leads, HR Directors
 
 Your responsibilities:
 1. Scan Outlook sent folder for prospects without replies (14+ days = follow-up trigger)
@@ -44,20 +38,25 @@ Your responsibilities:
 3. Research new prospects with specific pain points and contact information
 4. Analyze Bid Match opportunities against NAICS codes
 5. All drafts are for review/approval (never auto-send)
-6. Keep prospect tracking updated with status, dates, and next actions
 
-Tone: Professional, consultative, direct. Show knowledge of their business/challenges. Make it personal, not spammy."""
+Tone: Professional, consultative, direct."""
+
+@app.route('/api/health', methods=['GET'])
+def health():
+    return jsonify({"status": "healthy", "service": "RV BD Agent"}), 200
 
 @app.route('/api/scan-sent', methods=['POST'])
 def scan_sent_folder():
     try:
-        data = request.json
+        data = request.json or {}
         email = data.get('email', 'Fernando@RamirezVentures.com')
+        keywords = data.get('keywords', '')
         
         prompt = f"""I need you to help me scan my Outlook sent folder for stale prospects.
 
 My email: {email}
 Time period: Last 12 months
+{f'Keywords filter: {keywords}' if keywords else ''}
 
 Please identify any prospects who:
 1. Received an email 14-21 days ago with no reply
@@ -70,19 +69,16 @@ For each prospect, list:
 - Days since last email
 - Suggested follow-up approach
 
-Format as a clean, scannable list. Focus on business development prospects (federal contractors, corporate HR/payroll leads)."""
+Format as a clean, scannable list."""
 
         message = client.messages.create(
             model="claude-opus-4-1",
             max_tokens=2000,
             system=SYSTEM_PROMPT,
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
+            messages=[{"role": "user", "content": prompt}]
         )
         
         response_text = message.content[0].text if message.content else "No results found"
-        
         return jsonify({
             "status": "success",
             "action": "scan_sent_folder",
@@ -91,15 +87,12 @@ Format as a clean, scannable list. Focus on business development prospects (fede
         }), 200
         
     except Exception as e:
-        return jsonify({
-            "status": "error",
-            "message": str(e)
-        }), 500
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/find-prospects', methods=['POST'])
 def find_prospects():
     try:
-        data = request.json
+        data = request.json or {}
         prospect_type = data.get('prospect_type', 'both')
         keywords = data.get('keywords', '')
         
@@ -114,7 +107,7 @@ def find_prospects():
 Prospect Type: {prospect_desc.get(prospect_type, prospect_desc['both'])}
 {f'Keywords/Focus: {keywords}' if keywords else ''}
 
-Please research and identify high-fit prospects:
+Please research and identify 5-10 high-fit prospects:
 - Company name and location
 - Headcount/type
 - Decision-maker: Title, name (if known), email (if available)
@@ -122,19 +115,16 @@ Please research and identify high-fit prospects:
 - Why they're a good fit for Ramirez Ventures (global payroll, HR transformation, change management)
 - Fit score (1-10)
 
-Format as a clean list with these details for each prospect. Focus on actionable intelligence."""
+Format as a clean list with these details for each prospect."""
 
         message = client.messages.create(
             model="claude-opus-4-1",
             max_tokens=2000,
             system=SYSTEM_PROMPT,
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
+            messages=[{"role": "user", "content": prompt}]
         )
         
         response_text = message.content[0].text if message.content else "No results found"
-        
         return jsonify({
             "status": "success",
             "action": "find_prospects",
@@ -143,15 +133,12 @@ Format as a clean list with these details for each prospect. Focus on actionable
         }), 200
         
     except Exception as e:
-        return jsonify({
-            "status": "error",
-            "message": str(e)
-        }), 500
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/draft-email', methods=['POST'])
 def draft_email():
     try:
-        data = request.json
+        data = request.json or {}
         company = data.get('company', '')
         contact = data.get('contact', '')
         context = data.get('context', '')
@@ -178,13 +165,10 @@ Format: Just the email body, ready to copy to Outlook Drafts and send."""
             model="claude-opus-4-1",
             max_tokens=1000,
             system=SYSTEM_PROMPT,
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
+            messages=[{"role": "user", "content": prompt}]
         )
         
         response_text = message.content[0].text if message.content else "Failed to draft email"
-        
         return jsonify({
             "status": "success",
             "action": "draft_email",
@@ -195,10 +179,7 @@ Format: Just the email body, ready to copy to Outlook Drafts and send."""
         }), 200
         
     except Exception as e:
-        return jsonify({
-            "status": "error",
-            "message": str(e)
-        }), 500
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/scan-bidmatch', methods=['POST'])
 def scan_bidmatch():
@@ -221,13 +202,10 @@ Format as a clean list with: Opportunity Title, Agency, Deadline, Priority Level
             model="claude-opus-4-1",
             max_tokens=2000,
             system=SYSTEM_PROMPT,
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
+            messages=[{"role": "user", "content": prompt}]
         )
         
         response_text = message.content[0].text if message.content else "No matching opportunities found"
-        
         return jsonify({
             "status": "success",
             "action": "scan_bidmatch",
@@ -235,18 +213,7 @@ Format as a clean list with: Opportunity Title, Agency, Deadline, Priority Level
         }), 200
         
     except Exception as e:
-        return jsonify({
-            "status": "error",
-            "message": str(e)
-        }), 500
-
-@app.route('/api/health', methods=['GET'])
-def health_check():
-    return jsonify({
-        "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
-        "service": "RV Business Development Agent Backend"
-    }), 200
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/', methods=['GET'])
 def index():
@@ -263,6 +230,6 @@ def index():
     }), 200
 
 if __name__ == '__main__':
-    print("✓ Server ready. Listening on http://0.0.0.0:5000")
-    port = int(os.environ.get('PORT', 5000))
+    port = int(os.environ.get('PORT', 8000))
+    print(f"Starting RV BD Agent server on port {port}...")
     app.run(host='0.0.0.0', port=port, debug=False)
