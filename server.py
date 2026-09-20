@@ -301,6 +301,8 @@ def index():
     }), 200
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 8000))
+    # Railway sets PORT env var; default to 8080 for Railway
+    port = int(os.environ.get('PORT', 8080))
     print(f"Starting RV BD Agent server on port {port}...")
-    app.run(host='0.0.0.0', port=port, debug=False)
+    print(f"✓ API Key configured: {bool(api_key)}")
+    app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
